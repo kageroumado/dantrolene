@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import IOKit.pwr_mgt
 import os
@@ -88,6 +89,15 @@ final class DisplaySleepSimulator {
 
     private static let dimBrightness: Float = 0.03
 
+    /// Instant the simulator started or the display(s) last woke. After a wake the
+    /// panel brightness ramps for a few seconds; reads taken mid-ramp report transient
+    /// low values. Idle time (`CGEventSourceSecondsSinceLastEventType`) is *not* reset
+    /// by wake, so the first post-wake poll can otherwise fire a dim/off transition and
+    /// capture a ramp value into `savedBrightness` — corrupting the value later restored.
+    private var lastWakeInstant = ContinuousClock.now
+    private var displaysWereAsleep = false
+    private static let wakeSettleInterval: Duration = .seconds(5)
+
     // MARK: - Init
 
     init() {
@@ -106,6 +116,8 @@ final class DisplaySleepSimulator {
         applyMode(mode)
         refreshDisplays()
         setupKeyboardBacklight()
+        lastWakeInstant = .now
+        displaysWereAsleep = false
         state = .active
         startPolling()
 
@@ -237,6 +249,21 @@ final class DisplaySleepSimulator {
         return false
     }
 
+    // MARK: - Display Power State
+
+    /// Whether a display is awake and drawable. A display that is asleep (system sleep,
+    /// display sleep, or a clamshell-disabled built-in panel) reports unreliable
+    /// brightness and must never be read from or written to.
+    private func displayUsable(_ id: UInt32) -> Bool {
+        CGDisplayIsAsleep(id) == 0 && CGDisplayIsActive(id) != 0
+    }
+
+    /// True while still inside the post-wake brightness ramp, during which reads are
+    /// transient and captures would corrupt `savedBrightness`.
+    private var withinWakeSettle: Bool {
+        ContinuousClock.now - lastWakeInstant < Self.wakeSettleInterval
+    }
+
     // MARK: - Display Management
 
     private func refreshDisplays() {
@@ -265,8 +292,9 @@ final class DisplaySleepSimulator {
     private func resaveBrightness() {
         guard let getBr = _getBrightness else { return }
         displays = displays.map { d in
+            guard displayUsable(d.id) else { return d }
             var brightness: Float = 0
-            _ = getBr(d.id, &brightness)
+            guard getBr(d.id, &brightness) == 0 else { return d }
             return Display(id: d.id, savedBrightness: brightness)
         }
         resaveKeyboardBrightness()
@@ -274,14 +302,14 @@ final class DisplaySleepSimulator {
 
     private func setAllDisplayBrightness(_ brightness: Float) {
         guard let setBr = _setBrightness else { return }
-        for d in displays {
+        for d in displays where displayUsable(d.id) {
             _ = setBr(d.id, brightness)
         }
     }
 
     private func restoreAllBrightness() {
         guard let setBr = _setBrightness else { return }
-        for d in displays {
+        for d in displays where displayUsable(d.id) {
             _ = setBr(d.id, d.savedBrightness)
         }
     }
@@ -378,10 +406,22 @@ final class DisplaySleepSimulator {
     }
 
     private func poll() {
+        // Detect a display wake (asleep → awake) and re-arm the settle window so we
+        // never sample or apply brightness during the post-wake ramp, even for wakes
+        // that don't restart the simulator (e.g. external display sleep/wake).
+        let asleepNow = displays.contains { CGDisplayIsAsleep($0.id) != 0 }
+        if displaysWereAsleep, !asleepNow {
+            lastWakeInstant = .now
+        }
+        displaysWereAsleep = asleepNow
+
         let idle = userIdleTime()
 
         switch state {
         case .active:
+            // Never capture brightness while a display is asleep or still ramping after
+            // a wake — the reads are transient and would poison savedBrightness.
+            if asleepNow || withinWakeSettle { break }
             if idle >= offTimeout {
                 if otherProcessHoldsDisplayAssertion() { return }
                 Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → OFF")
