@@ -269,8 +269,7 @@ final class DantroleneManager {
         let nc = NSWorkspace.shared.notificationCenter
 
         sleepWakeObservers.append(
-            nc.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) {
-                [weak self] _ in
+            nc.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     Self.log.notice("System will sleep — releasing assertion and stopping simulator")
@@ -282,24 +281,23 @@ final class DantroleneManager {
                     // didWake re-evaluates and re-acquires.
                     self.adrafinil.releaseSynchronously()
                 }
-            }
+            },
         )
 
         sleepWakeObservers.append(
-            nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) {
-                [weak self] _ in
+            nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     Self.log.notice("System did wake — re-evaluating")
                     self.evaluate()
                 }
-            }
+            },
         )
 
         // The Adrafinil hold lives in its daemon, not in this process, so unlike the
         // IOPMAssertions it survives our exit — release it synchronously on the way out.
         terminationObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main,
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.adrafinil.releaseSynchronously()

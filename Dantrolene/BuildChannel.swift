@@ -8,9 +8,9 @@ import Foundation
 /// the launch log so support screenshots and log excerpts identify the edition.
 enum BuildChannel {
     #if APPSTORE
-    static let name: String? = "App Store"
+        static let name: String? = "App Store"
     #else
-    static let name: String? = nil
+        static let name: String? = nil
     #endif
 
     static var version: String {

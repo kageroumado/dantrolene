@@ -6,7 +6,7 @@ import os
 /// (the brightness-based one and the App Store overlay variant).
 enum DisplayPowerInfo {
     private static let log = Logger(
-        subsystem: "glass.kagerou.dantrolene", category: "DisplayPowerInfo"
+        subsystem: "glass.kagerou.dantrolene", category: "DisplayPowerInfo",
     )
 
     static func systemDisplaySleepMinutes() -> UInt? {

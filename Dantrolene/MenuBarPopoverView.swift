@@ -150,7 +150,7 @@ struct MenuBarPopoverView: View {
     private var displaySleepBinding: Binding<Int> {
         Binding(
             get: { manager.displaySleepMode.tag },
-            set: { manager.displaySleepMode = .init(tag: $0) }
+            set: { manager.displaySleepMode = .init(tag: $0) },
         )
     }
 

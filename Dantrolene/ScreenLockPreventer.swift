@@ -9,7 +9,7 @@ import os
 /// so no crash recovery mechanism is needed.
 final class ScreenLockPreventer {
     private nonisolated static let log = Logger(
-        subsystem: "glass.kagerou.dantrolene", category: "ScreenLockPreventer"
+        subsystem: "glass.kagerou.dantrolene", category: "ScreenLockPreventer",
     )
 
     private var assertionID: IOPMAssertionID = 0
@@ -25,7 +25,7 @@ final class ScreenLockPreventer {
             kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
             IOPMAssertionLevel(kIOPMAssertionLevelOn),
             "Dantrolene Lock Prevention" as CFString,
-            &assertionID
+            &assertionID,
         )
 
         if result == kIOReturnSuccess {

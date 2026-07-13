@@ -1,0 +1,34 @@
+# Swift version (enables modern syntax-aware rules; matches .swift-version)
+--swiftversion 6.2
+
+# Wrapping style
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+
+# Attribute placement
+--funcattributes prev-line
+--typeattributes prev-line
+
+# Enabled rules
+--enable blankLineAfterImports,blockComments,wrapEnumCases,wrapSingleLineComments
+
+# Disabled rules. redundantSelf is off: under Swift 6 strict concurrency it strips `self.` that the
+# compiler REQUIRES in escaping/Sendable closures and OSLog autoclosures, breaking the build. Leave
+# self management to the author.
+--disable wrapMultilineStatementBraces,wrapMultilineConditionalAssignment,blankLinesBetweenScopes,redundantInternal,redundantSelf
+
+# Header stripping
+--header strip
+
+# Numeric formatting
+--decimalgrouping 3
+
+# Import grouping
+--importgrouping testable-last
+
+# Preserve indentation on empty lines
+--trimwhitespace nonblank
+
+# Build artifacts — never format these.
+--exclude build,DerivedData,.build,.swiftpm
