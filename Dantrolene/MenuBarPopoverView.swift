@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarPopoverView: View {
     @Bindable var manager: DantroleneManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +35,8 @@ struct MenuBarPopoverView: View {
             Divider()
 
             quitSection
+
+            versionFooter
         }
         .frame(width: 280)
         .onAppear {
@@ -47,20 +50,21 @@ struct MenuBarPopoverView: View {
         HStack(spacing: 12) {
             Image(systemName: manager.isPreventingLock ? "pill.fill" : "pill")
                 .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 24, weight: .medium))
+                .font(.system(.title, weight: .medium))
                 .foregroundStyle(manager.isPreventingLock ? Color.accentColor : .secondary)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 28)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .frame(minWidth: 28)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(manager.statusText)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(.body, weight: .semibold))
 
                 Text(manager.detailText)
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .lineLimit(1)
+            .accessibilityElement(children: .combine)
 
             Spacer(minLength: 0)
 
@@ -95,8 +99,9 @@ struct MenuBarPopoverView: View {
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Mode")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(.subheadline, weight: .medium))
                 .foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
 
             Picker("Mode", selection: $manager.mode) {
                 ForEach(DantroleneManager.Mode.allCases) { mode in
@@ -105,6 +110,7 @@ struct MenuBarPopoverView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .accessibilityLabel("Mode")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -116,8 +122,9 @@ struct MenuBarPopoverView: View {
     private var displaySleepSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Display Sleep")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(.subheadline, weight: .medium))
                 .foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
 
             Picker("Display Sleep", selection: displaySleepBinding) {
                 Text("Match System").tag(0)
@@ -133,6 +140,7 @@ struct MenuBarPopoverView: View {
             }
             .pickerStyle(.menu)
             .labelsHidden()
+            .accessibilityLabel("Display sleep timeout")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -152,18 +160,19 @@ struct MenuBarPopoverView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Home Network")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.subheadline, weight: .medium))
                     .foregroundStyle(.secondary)
 
                 if let homeSSID = manager.homeSSID {
                     Text(homeSSID)
-                        .font(.system(size: 13))
+                        .font(.body)
                 } else {
                     Text("Not set")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.tertiary)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             Spacer(minLength: 0)
 
@@ -173,6 +182,7 @@ struct MenuBarPopoverView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel("Clear home network")
             }
 
             if manager.currentSSID != nil {
@@ -182,6 +192,7 @@ struct MenuBarPopoverView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(manager.isOnHomeNetwork)
+                .accessibilityLabel("Set current network as home")
             }
         }
         .padding(.horizontal, 14)
@@ -194,22 +205,22 @@ struct MenuBarPopoverView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Block Lid-Close Sleep")
-                    .font(.system(size: 13))
+                    .font(.body)
 
                 Text(lidCloseSleepCaption)
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .lineLimit(1)
 
             Spacer(minLength: 0)
 
-            Toggle("", isOn: $manager.blockLidCloseSleep)
+            Toggle("Block Lid-Close Sleep", isOn: $manager.blockLidCloseSleep)
                 .toggleStyle(.switch)
                 .labelsHidden()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 
     private var lidCloseSleepCaption: String {
@@ -226,16 +237,17 @@ struct MenuBarPopoverView: View {
     private var launchAtLoginSection: some View {
         HStack {
             Text("Launch at Login")
-                .font(.system(size: 13))
+                .font(.body)
 
             Spacer()
 
-            Toggle("", isOn: $manager.launchAtLogin)
+            Toggle("Launch at Login", isOn: $manager.launchAtLogin)
                 .toggleStyle(.switch)
                 .labelsHidden()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Quit
@@ -245,7 +257,7 @@ struct MenuBarPopoverView: View {
             NSApplication.shared.terminate(nil)
         } label: {
             Text("Quit Dantrolene")
-                .font(.system(size: 13))
+                .font(.body)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -253,6 +265,16 @@ struct MenuBarPopoverView: View {
         .buttonStyle(PopoverMenuItemStyle())
         .keyboardShortcut("q")
         .padding(4)
+    }
+
+    // MARK: - Version Footer
+
+    private var versionFooter: some View {
+        Text("Version \(BuildChannel.description)")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 6)
     }
 }
 

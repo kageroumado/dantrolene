@@ -1,6 +1,8 @@
 import Foundation
 import os
 
+#if !APPSTORE
+
 /// Blocks lid-close sleep through the Adrafinil CLI while Dantrolene is active on the home network.
 ///
 /// Adrafinil is a separate app whose privileged helper keeps a MacBook awake with the lid closed.
@@ -294,3 +296,23 @@ final class AdrafinilBridge {
         "home-" + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8).lowercased()
     }
 }
+
+#else
+
+/// App Store builds are sandboxed: they can neither spawn the Adrafinil CLI nor reach its
+/// daemon socket, so the integration is compiled out. This inert stand-in keeps the manager
+/// and popover code identical across both builds — `isInstalled` staying false hides the
+/// lid-close sleep section entirely.
+@Observable
+final class AdrafinilBridge {
+    let isInstalled = false
+    let isBlockingSleep = false
+    let isHoldConfirmed = false
+
+    func refreshInstallation() {}
+    func startBlocking(reason: String) {}
+    func stopBlocking() {}
+    func releaseSynchronously() {}
+}
+
+#endif

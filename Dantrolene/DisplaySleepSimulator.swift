@@ -1,23 +1,9 @@
+#if !APPSTORE
+
 import CoreGraphics
 import Foundation
 import IOKit.pwr_mgt
 import os
-
-enum DisplaySleepMode: Hashable {
-    case matchSystem
-    case custom(minutes: Int)
-
-    var tag: Int {
-        switch self {
-        case .matchSystem: 0
-        case let .custom(m): m
-        }
-    }
-
-    init(tag: Int) {
-        self = tag == 0 ? .matchSystem : .custom(minutes: tag)
-    }
-}
 
 /// Simulates the normal display sleep sequence (dim → off → restore on activity)
 /// while an IOPMAssertion prevents actual system display sleep.
@@ -153,7 +139,7 @@ final class DisplaySleepSimulator {
     private func applyMode(_ mode: DisplaySleepMode) {
         switch mode {
         case .matchSystem:
-            guard let minutes = readSystemDisplaySleepMinutes() else { return }
+            guard let minutes = DisplayPowerInfo.systemDisplaySleepMinutes() else { return }
             setTimeouts(totalSeconds: TimeInterval(minutes * 60))
         case let .custom(minutes):
             setTimeouts(totalSeconds: TimeInterval(minutes * 60))
@@ -202,51 +188,6 @@ final class DisplaySleepSimulator {
         if let sym = dlsym(cg, "CGEventSourceSecondsSinceLastEventType") {
             _getIdleTime = unsafeBitCast(sym, to: IdleTimeFn.self)
         }
-    }
-
-    // MARK: - System Timeout
-
-    private func readSystemDisplaySleepMinutes() -> UInt? {
-        let fb = IOPMFindPowerManagement(kIOMainPortDefault)
-        guard fb != 0 else {
-            Self.log.warning("Failed to open power management connection")
-            return nil
-        }
-        defer { IOServiceClose(fb) }
-
-        var minutes: UInt = 0
-        let result = IOPMGetAggressiveness(fb, UInt(kPMMinutesToDim), &minutes)
-        guard result == kIOReturnSuccess, minutes > 0 else { return nil }
-        return minutes
-    }
-
-    // MARK: - Display Assertion Check
-
-    private func otherProcessHoldsDisplayAssertion() -> Bool {
-        var rawDict: Unmanaged<CFDictionary>?
-        guard IOPMCopyAssertionsByProcess(&rawDict) == kIOReturnSuccess,
-              let cfDict = rawDict?.takeRetainedValue()
-        else { return false }
-
-        let dict = cfDict as NSDictionary
-        let myPID = ProcessInfo.processInfo.processIdentifier
-
-        for (key, value) in dict {
-            guard let pid = (key as? NSNumber)?.int32Value,
-                  pid != myPID,
-                  let assertions = value as? [[String: Any]]
-            else { continue }
-
-            for assertion in assertions {
-                if let type = assertion["AssertType"] as? String,
-                   type == "PreventUserIdleDisplaySleep" {
-                    let name = assertion["AssertName"] as? String ?? "unknown"
-                    Self.log.info("PID \(pid) holds display assertion: \(name)")
-                    return true
-                }
-            }
-        }
-        return false
     }
 
     // MARK: - Display Power State
@@ -423,14 +364,14 @@ final class DisplaySleepSimulator {
             // a wake — the reads are transient and would poison savedBrightness.
             if asleepNow || withinWakeSettle { break }
             if idle >= offTimeout {
-                if otherProcessHoldsDisplayAssertion() { return }
+                if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() { return }
                 Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → OFF")
                 resaveBrightness()
                 setAllDisplayBrightness(0)
                 setKeyboardBrightness(0)
                 state = .off
             } else if idle >= dimTimeout {
-                if otherProcessHoldsDisplayAssertion() { return }
+                if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() { return }
                 Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → DIM")
                 resaveBrightness()
                 setAllDisplayBrightness(Self.dimBrightness)
@@ -443,7 +384,7 @@ final class DisplaySleepSimulator {
                 Self.log.info("Activity → RESTORE")
                 restoreAndActivate()
             } else if idle >= offTimeout {
-                if otherProcessHoldsDisplayAssertion() {
+                if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() {
                     Self.log.info("External assertion detected → RESTORE from dim")
                     restoreAndActivate()
                     return
@@ -464,3 +405,5 @@ final class DisplaySleepSimulator {
         }
     }
 }
+
+#endif

@@ -177,6 +177,8 @@ final class DantroleneManager {
             self.isPreventingLock = isActive
         }
 
+        Self.log.notice("Dantrolene \(BuildChannel.description, privacy: .public) started")
+
         startObserving()
         registerForSleepWake()
 

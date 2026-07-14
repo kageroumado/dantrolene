@@ -22,3 +22,6 @@ Package.resolved
 .DS_Store
 *.swp
 *~
+
+# App Store metadata, screenshots, and other non-source release assets
+AppStore/

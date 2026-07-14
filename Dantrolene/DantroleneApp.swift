@@ -9,6 +9,7 @@ struct DantroleneApp: App {
             MenuBarPopoverView(manager: manager)
         } label: {
             Image(systemName: manager.isPreventingLock ? "pill.fill" : "pill")
+                .accessibilityLabel("Dantrolene")
         }
         .menuBarExtraStyle(.window)
     }
