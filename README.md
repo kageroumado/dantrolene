@@ -14,8 +14,8 @@
 
 <table>
   <tr>
-    <td align="center"><img src=".github/dantrolene-home.png" alt="Home — the arc-house mark and Preventing lock on the home network, with mode and display sleep pill selectors" width="380"><br><sub><b>home</b> ・ on your wifi — the screen never locks</sub></td>
-    <td align="center"><img src=".github/dantrolene-away.png" alt="Away — the mark folds into a padlock and the Mac locks normally away from the home network" width="380"><br><sub><b>away</b> ・ any other network, it locks like it should</sub></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/dantrolene-home-dark.png"><img src=".github/dantrolene-home.png" alt="Home — the arc-house mark and Preventing lock on the home network, with mode and display sleep pill selectors" width="380"></picture><br><sub><b>home</b> ・ on your wifi — the screen never locks</sub></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/dantrolene-away-dark.png"><img src=".github/dantrolene-away.png" alt="Away — the mark folds into a padlock and the Mac locks normally away from the home network" width="380"></picture><br><sub><b>away</b> ・ any other network, it locks like it should</sub></td>
   </tr>
 </table>
 
