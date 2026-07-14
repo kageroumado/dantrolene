@@ -21,6 +21,12 @@ struct MenuBarPopoverView: View {
 
             homeNetworkSection
 
+            if manager.isAdrafinilInstalled {
+                Divider()
+
+                lidCloseSleepSection
+            }
+
             Divider()
 
             launchAtLoginSection
@@ -30,6 +36,9 @@ struct MenuBarPopoverView: View {
             quitSection
         }
         .frame(width: 280)
+        .onAppear {
+            manager.refreshAdrafinilDetection()
+        }
     }
 
     // MARK: - Status
@@ -177,6 +186,39 @@ struct MenuBarPopoverView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    // MARK: - Lid-Close Sleep
+
+    private var lidCloseSleepSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Block Lid-Close Sleep")
+                    .font(.system(size: 13))
+
+                Text(lidCloseSleepCaption)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            Toggle("", isOn: $manager.blockLidCloseSleep)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private var lidCloseSleepCaption: String {
+        guard manager.isBlockingLidCloseSleep else {
+            return "Via Adrafinil, while on home network"
+        }
+        return manager.isLidCloseHoldConfirmed
+            ? "Active — holding via Adrafinil"
+            : "Adrafinil isn't responding — retrying"
     }
 
     // MARK: - Launch at Login

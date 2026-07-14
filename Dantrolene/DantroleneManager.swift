@@ -53,6 +53,13 @@ final class DantroleneManager {
         }
     }
 
+    var blockLidCloseSleep: Bool {
+        didSet {
+            UserDefaults.standard.set(blockLidCloseSleep, forKey: Keys.blockLidCloseSleep)
+            evaluate()
+        }
+    }
+
     @ObservationIgnored private var isUpdatingLaunchAtLogin = false
 
     var launchAtLogin: Bool {
@@ -95,6 +102,18 @@ final class DantroleneManager {
         return home == current
     }
 
+    var isAdrafinilInstalled: Bool {
+        adrafinil.isInstalled
+    }
+
+    var isBlockingLidCloseSleep: Bool {
+        adrafinil.isBlockingSleep
+    }
+
+    var isLidCloseHoldConfirmed: Bool {
+        adrafinil.isHoldConfirmed
+    }
+
     var statusText: String {
         isPreventingLock ? "Lock Prevention Active" : "Lock Prevention Inactive"
     }
@@ -125,6 +144,7 @@ final class DantroleneManager {
         static let homeSSID = "homeSSID"
         static let displaySleepModeIsCustom = "displaySleepModeIsCustom"
         static let displaySleepCustomMinutes = "displaySleepCustomMinutes"
+        static let blockLidCloseSleep = "blockLidCloseSleep"
     }
 
     private static let log = Logger(subsystem: "glass.kagerou.dantrolene", category: "Manager")
@@ -132,8 +152,10 @@ final class DantroleneManager {
     @ObservationIgnored private let wifiMonitor = WiFiMonitor()
     @ObservationIgnored private let lockPreventer = ScreenLockPreventer()
     @ObservationIgnored private let displaySimulator = DisplaySleepSimulator()
+    @ObservationIgnored private let adrafinil = AdrafinilBridge()
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var sleepWakeObservers: [any NSObjectProtocol] = []
+    @ObservationIgnored private nonisolated(unsafe) var terminationObserver: (any NSObjectProtocol)?
 
     // MARK: - Init
 
@@ -147,6 +169,7 @@ final class DantroleneManager {
             self.displaySleepMode = .custom(minutes: max(minutes, 1))
         }
 
+        self.blockLidCloseSleep = UserDefaults.standard.bool(forKey: Keys.blockLidCloseSleep)
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
 
         lockPreventer.onStateChanged = { [weak self] isActive in
@@ -168,6 +191,9 @@ final class DantroleneManager {
         for observer in sleepWakeObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+        }
     }
 
     // MARK: - Actions
@@ -182,6 +208,13 @@ final class DantroleneManager {
 
     func requestLocationAccess() {
         wifiMonitor.requestLocationAccess()
+    }
+
+    /// Re-detects the Adrafinil CLI (called when the popover opens) and re-evaluates, so an
+    /// install or uninstall takes effect without relaunching Dantrolene.
+    func refreshAdrafinilDetection() {
+        adrafinil.refreshInstallation()
+        evaluate()
     }
 
     func openLocationSettings() {
@@ -215,6 +248,17 @@ final class DantroleneManager {
             displaySimulator.stop()
             lockPreventer.disable()
         }
+
+        // Lid-close sleep blocking follows the WiFi signal directly (not `shouldPrevent`):
+        // in Always On mode away from home, blocking sleep in a closed laptop bag would be
+        // a hazard, so the hold is only ever placed on the home network.
+        let shouldBlockSleep = blockLidCloseSleep && mode != .off && isOnHomeNetwork
+        if shouldBlockSleep {
+            let reason = homeSSID.map { "On home network \"\($0)\"" } ?? "On home network"
+            adrafinil.startBlocking(reason: reason)
+        } else {
+            adrafinil.stopBlocking()
+        }
     }
 
     // MARK: - Sleep/Wake
@@ -230,6 +274,11 @@ final class DantroleneManager {
                     Self.log.notice("System will sleep — releasing assertion and stopping simulator")
                     self.displaySimulator.stop()
                     self.lockPreventer.disable()
+                    // Sleep is proceeding despite any hold (e.g. user-initiated). Release ours
+                    // synchronously — a merely-enqueued release could be suspended with the
+                    // rest of the process and leave the hold registered across sleep.
+                    // didWake re-evaluates and re-acquires.
+                    self.adrafinil.releaseSynchronously()
                 }
             }
         )
@@ -244,5 +293,15 @@ final class DantroleneManager {
                 }
             }
         )
+
+        // The Adrafinil hold lives in its daemon, not in this process, so unlike the
+        // IOPMAssertions it survives our exit — release it synchronously on the way out.
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.adrafinil.releaseSynchronously()
+            }
+        }
     }
 }
