@@ -21,6 +21,16 @@ final class WiFiMonitor: NSObject {
         guard !isRunning else { return }
         isRunning = true
 
+        #if DEBUG
+            // Screenshot staging: fake the SSID and authorization so home/away popover states
+            // can be staged on any machine (paired with ScreenshotGallery, no Location prompt).
+            if let fake = ProcessInfo.processInfo.environment["DANTROLENE_FAKE_SSID"] {
+                authorizationStatus = .authorizedAlways
+                currentSSID = fake
+                return
+            }
+        #endif
+
         locationManager.delegate = self
 
         let status = locationManager.authorizationStatus
