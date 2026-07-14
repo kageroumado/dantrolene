@@ -48,13 +48,15 @@ struct MenuBarPopoverView: View {
 
     private var statusSection: some View {
         HStack(spacing: 12) {
-            Image(systemName: manager.isPreventingLock ? "pill.fill" : "pill")
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(.title, weight: .medium))
-                .foregroundStyle(manager.isPreventingLock ? Color.accentColor : .secondary)
-                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-                .frame(minWidth: 28)
-                .accessibilityHidden(true)
+            // The state icon folds between house and padlock via true path interpolation —
+            // symbol replace transitions can't morph unannotated custom symbols.
+            MorphingMark(
+                progress: manager.isPreventingLock ? 0 : 1,
+                animation: reduceMotion ? nil : .smooth(duration: 0.45),
+            )
+            .foregroundStyle(manager.isPreventingLock ? Color.accentColor : .secondary)
+            .frame(width: 44, height: 44)
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(manager.statusText)

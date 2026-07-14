@@ -41,7 +41,110 @@
             stage.center()
             window = stage
             stage.makeKeyAndOrderFront(nil)
+            presentSymbolLab()
             NSApp.activate(ignoringOtherApps: true)
+        }
+
+        // MARK: - Symbol lab
+
+        private static var labWindow: NSWindow?
+
+        /// A plain window with a free-floating toggle (wired to nothing) driving the
+        /// house⇄padlock symbol transition, for judging the state-change animation by hand.
+        /// The menu bar item itself never animates — MenuBarExtra labels don't run symbol
+        /// effects — so this is where the transition is evaluated.
+        private static func presentSymbolLab() {
+            if let labWindow {
+                labWindow.makeKeyAndOrderFront(nil)
+                return
+            }
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SymbolLabView()))
+            window.title = "Dantrolene — Symbol Lab"
+            window.styleMask = [.titled, .closable, .miniaturizable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            window.setFrameTopLeftPoint(NSPoint(x: window.frame.minX + 400, y: window.frame.maxY))
+            labWindow = window
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private struct SymbolLabView: View {
+        @State private var locked = false
+        @State private var scrub: CGFloat = 0
+
+        var body: some View {
+            VStack(spacing: 24) {
+                Toggle("Locked", isOn: $locked.animation(.smooth(duration: 0.45)))
+                    .toggleStyle(.switch)
+
+                labRow("MorphingMark — true path interpolation") {
+                    MorphingMark(progress: locked ? 1 : 0)
+                        .frame(width: 72, height: 72)
+                    MorphingMark(progress: locked ? 1 : 0)
+                        .frame(width: 18, height: 18)
+                }
+
+                labRow("scrub the fold by hand") {
+                    VStack(spacing: 8) {
+                        MorphingMark(progress: scrub, animation: nil)
+                            .frame(width: 72, height: 72)
+                        Slider(value: $scrub, in: 0 ... 1)
+                            .frame(width: 180)
+                    }
+                }
+
+                labRow("MenuBarIcon — constant canvas, both states") {
+                    menuBarStrip(dark: false)
+                    menuBarStrip(dark: true)
+                }
+
+                labRow("locked detail candidates — plain · dot · keyhole") {
+                    lockedDetailStrip(dark: false)
+                    lockedDetailStrip(dark: true)
+                }
+            }
+            .padding(28)
+            .frame(minWidth: 420)
+        }
+
+        /// Both menu bar images side by side on a bar-like background, template-tinted the
+        /// way the real menu bar would render them.
+        private func menuBarStrip(dark: Bool) -> some View {
+            HStack(spacing: 10) {
+                Image(nsImage: MenuBarIcon.image(locked: false))
+                Image(nsImage: MenuBarIcon.image(locked: true))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(dark ? Color.black.opacity(0.85) : Color(white: 0.92), in: RoundedRectangle(cornerRadius: 6))
+            .environment(\.colorScheme, dark ? .dark : .light)
+        }
+
+        /// The home mark followed by each locked-detail candidate, for judging how much
+        /// interior the padlock should keep at menu bar size.
+        private func lockedDetailStrip(dark: Bool) -> some View {
+            HStack(spacing: 10) {
+                Image(nsImage: MenuBarIcon.image(locked: false))
+                ForEach(MenuBarIcon.LockedDetail.allCases, id: \.self) { detail in
+                    Image(nsImage: MenuBarIcon.image(locked: true, detail: detail))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(dark ? Color.black.opacity(0.85) : Color(white: 0.92), in: RoundedRectangle(cornerRadius: 6))
+            .environment(\.colorScheme, dark ? .dark : .light)
+        }
+
+        private func labRow(_ caption: String, @ViewBuilder content: () -> some View) -> some View {
+            VStack(spacing: 10) {
+                HStack(alignment: .bottom, spacing: 40) {
+                    content()
+                }
+                Text(caption)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
