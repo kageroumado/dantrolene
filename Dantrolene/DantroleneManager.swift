@@ -147,13 +147,21 @@ final class DantroleneManager {
         static let blockLidCloseSleep = "blockLidCloseSleep"
     }
 
+    private enum Constants {
+        /// Grace before releasing the lid-close hold once the current SSID reads nil, so a
+        /// transient WiFi drop (router reboot, DFS switch, roam) doesn't let a closed-lid Mac
+        /// sleep — a sleeping Mac can't re-associate, which would defeat the hold entirely.
+        static let ssidLossGraceSeconds: TimeInterval = 60
+    }
+
     private static let log = Logger(subsystem: "glass.kagerou.dantrolene", category: "Manager")
 
     @ObservationIgnored private let wifiMonitor = WiFiMonitor()
     @ObservationIgnored private let lockPreventer = ScreenLockPreventer()
-    @ObservationIgnored private let displaySimulator = DisplaySleepSimulator()
+    @ObservationIgnored private let displaySimulator = DisplaySleepStateMachine()
     @ObservationIgnored private let adrafinil = AdrafinilBridge()
     @ObservationIgnored private var observationTask: Task<Void, Never>?
+    @ObservationIgnored private var ssidLossGraceTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var sleepWakeObservers: [any NSObjectProtocol] = []
     @ObservationIgnored private nonisolated(unsafe) var terminationObserver: (any NSObjectProtocol)?
 
@@ -190,6 +198,7 @@ final class DantroleneManager {
 
     deinit {
         observationTask?.cancel()
+        ssidLossGraceTask?.cancel()
         for observer in sleepWakeObservers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -254,13 +263,45 @@ final class DantroleneManager {
         // Lid-close sleep blocking follows the WiFi signal directly (not `shouldPrevent`):
         // in Always On mode away from home, blocking sleep in a closed laptop bag would be
         // a hazard, so the hold is only ever placed on the home network.
-        let shouldBlockSleep = blockLidCloseSleep && mode != .off && isOnHomeNetwork
-        if shouldBlockSleep {
+        let wantsBlockAtHome = blockLidCloseSleep && mode != .off
+        if wantsBlockAtHome, isOnHomeNetwork {
+            cancelSSIDLossGrace()
             let reason = homeSSID.map { "On home network \"\($0)\"" } ?? "On home network"
             adrafinil.startBlocking(reason: reason)
+        } else if adrafinil.isBlockingSleep, wantsBlockAtHome, currentSSID == nil {
+            // A transient WiFi drop reads as "not home", but releasing the hold now would let the
+            // closed lid sleep — and a sleeping Mac can't re-associate, killing the exact workload
+            // the hold protects. Debounce only this nil-SSID release; a *different* SSID means the
+            // user actually moved and falls through to the immediate release below.
+            startSSIDLossGrace()
         } else {
+            cancelSSIDLossGrace()
             adrafinil.stopBlocking()
         }
+    }
+
+    // MARK: - Lid-close hold grace
+
+    /// Debounces the lid-close hold's release across a transient SSID loss. Cancelled the moment
+    /// the home network returns (or a different one appears); fires a real release if we're still
+    /// away when it elapses. A crash mid-grace is covered by the hold's daemon-side TTL.
+    private func startSSIDLossGrace() {
+        guard ssidLossGraceTask == nil else { return }
+        Self.log.notice("WiFi dropped while holding lid-close sleep — grace before release")
+        ssidLossGraceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Constants.ssidLossGraceSeconds))
+            guard let self, !Task.isCancelled else { return }
+            ssidLossGraceTask = nil
+            if !isOnHomeNetwork {
+                Self.log.notice("Grace elapsed, still away from home — releasing lid-close hold")
+                adrafinil.stopBlocking()
+            }
+        }
+    }
+
+    private func cancelSSIDLossGrace() {
+        ssidLossGraceTask?.cancel()
+        ssidLossGraceTask = nil
     }
 
     // MARK: - Sleep/Wake
@@ -275,6 +316,7 @@ final class DantroleneManager {
                     Self.log.notice("System will sleep — releasing assertion and stopping simulator")
                     self.displaySimulator.stop()
                     self.lockPreventer.disable()
+                    self.cancelSSIDLossGrace()
                     // Sleep is proceeding despite any hold (e.g. user-initiated). Release ours
                     // synchronously — a merely-enqueued release could be suspended with the
                     // rest of the process and leave the hold registered across sleep.
@@ -300,7 +342,14 @@ final class DantroleneManager {
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main,
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.adrafinil.releaseSynchronously()
+                guard let self else { return }
+                // Restore hardware brightness before exit. Persisted 0/0.03 (simulated .off)
+                // would otherwise survive process death — a nightly macOS-update restart would
+                // wake to a black login screen. The willSleep path stops the simulator; so must this.
+                self.displaySimulator.stop()
+                self.lockPreventer.disable()
+                self.cancelSSIDLossGrace()
+                self.adrafinil.releaseSynchronously()
             }
         }
     }

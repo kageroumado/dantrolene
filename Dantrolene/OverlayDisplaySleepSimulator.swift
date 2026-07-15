@@ -1,103 +1,110 @@
 #if APPSTORE
 
     import AppKit
-    import CoreGraphics
     import Foundation
     import os
 
-    /// App Store variant of the display sleep simulation (dim → off → restore on activity).
+    /// App Store effects for `DisplaySleepStateMachine`. Sandboxed builds can't touch the private
+    /// DisplayServices/CoreBrightness frameworks the direct edition drives, so instead of lowering
+    /// the backlight this covers every screen with black borderless windows — translucent for dim,
+    /// opaque for off. The panel stays lit underneath; visually the effect matches, which is all the
+    /// lock-prevention use case needs (a dark screen that never locks).
     ///
-    /// Sandboxed builds cannot touch the private DisplayServices/CoreBrightness frameworks the
-    /// direct-distribution simulator drives, so instead of lowering the backlight this variant
-    /// covers every screen with black borderless windows — translucent for the dim stage, opaque
-    /// for off. The panel stays lit underneath; visually the effect matches, which is what the
-    /// lock-prevention use case needs (the point is a dark screen that never locks).
-    ///
-    /// The overlay windows absorb mouse clicks so a blind click into a "sleeping" screen can't
-    /// land on whatever sits beneath; any HID activity still advances the system idle clock,
-    /// which the poll loop watches to tear the overlays down.
-    final class DisplaySleepSimulator {
-        private enum State {
-            case idle
-            case active
-            case dimmed
-            case off
-        }
-
-        private var state: State = .idle
-
+    /// The overlays absorb mouse clicks so a blind click into a "sleeping" screen can't land on
+    /// whatever sits beneath; any HID activity still advances the system idle clock, which the state
+    /// machine watches to tear the overlays down.
+    final class OverlayEffects: DisplaySleepEffects {
         private nonisolated static let log = Logger(
-            subsystem: "glass.kagerou.dantrolene", category: "DisplaySleepSimulator",
+            subsystem: "glass.kagerou.dantrolene", category: "OverlayEffects",
         )
 
         private enum Constants {
             static let dimAlpha: CGFloat = 0.7
+            static let offAlpha: CGFloat = 1.0
             static let fadeDuration: TimeInterval = 0.6
-            static let pollInterval: Duration = .milliseconds(500)
         }
-
-        // MARK: - State
 
         private var overlayWindows: [NSWindow] = []
-        private var pollTask: Task<Void, Never>?
-        private var dimTimeout: TimeInterval = 570
-        private var offTimeout: TimeInterval = 600
+        private var currentAlpha: CGFloat = 0
+        /// The app that was frontmost when the off-stage overlay took key, so activation can be
+        /// handed back on wake rather than leaving the user in Dantrolene.
+        private var appBeforeTakingKey: NSRunningApplication?
 
-        // MARK: - Public
+        // MARK: - DisplaySleepEffects
 
-        func start(mode: DisplaySleepMode) {
-            guard state == .idle else { return }
-            applyMode(mode)
-            state = .active
-            startPolling()
-
-            Self.log.notice(
-                "Started overlay simulator (dim at \(self.dimTimeout, format: .fixed(precision: 0))s, off at \(self.offTimeout, format: .fixed(precision: 0))s)",
-            )
+        func begin() -> Bool {
+            true
         }
 
-        func stop() {
-            guard state != .idle else { return }
-            pollTask?.cancel()
-            pollTask = nil
+        /// Overlays never sample hardware, so there's nothing to guard against; always ready.
+        func tick(shouldBeAwake _: Bool) -> Bool {
+            true
+        }
+
+        func captureBaseline() {}
+
+        func applyDim() {
+            showOverlays(alpha: Constants.dimAlpha, animated: true)
+        }
+
+        func applyOff() {
+            showOverlays(alpha: Constants.offAlpha, animated: true)
+            takeKeyToSwallowWakeKeystroke()
+        }
+
+        func restore() {
             removeOverlays()
-            state = .idle
-            Self.log.notice("Stopped")
+            returnKeyToPreviousApp()
         }
 
-        func updateTimeout(_ mode: DisplaySleepMode) {
-            guard state != .idle else { return }
-            applyMode(mode)
-            Self.log.info(
-                "Updated timeouts (dim at \(self.dimTimeout, format: .fixed(precision: 0))s, off at \(self.offTimeout, format: .fixed(precision: 0))s)",
-            )
+        func end() {
+            removeOverlays()
+            returnKeyToPreviousApp()
         }
 
-        // MARK: - Timeout Configuration
-
-        private func applyMode(_ mode: DisplaySleepMode) {
-            switch mode {
-            case .matchSystem:
-                guard let minutes = DisplayPowerInfo.systemDisplaySleepMinutes() else { return }
-                setTimeouts(totalSeconds: TimeInterval(minutes * 60))
-            case let .custom(minutes):
-                setTimeouts(totalSeconds: TimeInterval(minutes * 60))
+        func displayTopologyChanged() {
+            // Rebuild the overlays for the new screen set if we're currently covering the display,
+            // so a screen added or removed mid-"sleep" is handled at once.
+            guard !overlayWindows.isEmpty else { return }
+            let alpha = currentAlpha
+            removeOverlays()
+            showOverlays(alpha: alpha, animated: false)
+            // The window that held key was just closed; hand it to the rebuilt one so the off stage
+            // keeps swallowing keystrokes. `appBeforeTakingKey` is already recorded — don't re-capture
+            // it here or we'd remember Dantrolene itself as the app to return to.
+            if alpha == Constants.offAlpha, let window = overlayWindows.first {
+                window.makeKeyAndOrderFront(nil)
             }
         }
 
-        private func setTimeouts(totalSeconds: TimeInterval) {
-            offTimeout = totalSeconds
-            dimTimeout = max(totalSeconds - 30, totalSeconds * 0.75)
+        // MARK: - Key handling
+
+        /// The screen is black in the off stage, so the keystroke a user presses to "wake" it is
+        /// aimed at nothing — but without key status it lands in whatever app sits hidden behind the
+        /// overlay (Space toggles playback, Return sends a half-typed message). Take key while off so
+        /// that keystroke dies here instead. The machine wakes on the idle clock, not on the event.
+        private func takeKeyToSwallowWakeKeystroke() {
+            guard appBeforeTakingKey == nil, let window = overlayWindows.first else { return }
+            appBeforeTakingKey = NSWorkspace.shared.frontmostApplication
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
         }
 
-        // MARK: - Overlay Windows
+        /// Hand activation back to whoever had it, so waking doesn't strand the user in Dantrolene.
+        private func returnKeyToPreviousApp() {
+            guard let previous = appBeforeTakingKey else { return }
+            appBeforeTakingKey = nil
+            guard !previous.isTerminated, previous.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            previous.activate()
+        }
+
+        // MARK: - Overlay windows
 
         private func showOverlays(alpha: CGFloat, animated: Bool) {
-            // Rebuilt on every dim entry so a screen added or removed while active
-            // is covered correctly the next time the displays "sleep".
             if overlayWindows.isEmpty {
                 overlayWindows = NSScreen.screens.map(Self.makeOverlayWindow)
             }
+            currentAlpha = alpha
             if animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = Constants.fadeDuration
@@ -118,10 +125,11 @@
                 window.close()
             }
             overlayWindows = []
+            currentAlpha = 0
         }
 
         private static func makeOverlayWindow(for screen: NSScreen) -> NSWindow {
-            let window = NSWindow(
+            let window = KeystrokeSwallowingWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
                 backing: .buffered,
@@ -140,79 +148,19 @@
             window.orderFrontRegardless()
             return window
         }
+    }
 
-        // MARK: - Polling
-
-        private func startPolling() {
-            pollTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    guard let self else { return }
-                    poll()
-                    try? await Task.sleep(for: Constants.pollInterval, tolerance: .milliseconds(200))
-                }
-            }
+    /// Borderless windows refuse key status by default, which is what let the waking keystroke fall
+    /// through to the app hidden behind a black overlay. This one accepts key and eats the event:
+    /// the state machine wakes off the idle clock, so nothing here needs to act on it, and
+    /// `NSResponder`'s default would beep at the user.
+    private final class KeystrokeSwallowingWindow: NSWindow {
+        override var canBecomeKey: Bool {
+            true
         }
-
-        /// Seconds since the last hardware input event. `kCGAnyInputEventType` has no Swift
-        /// spelling, so this takes the minimum across the event types a user actually wakes
-        /// a machine with.
-        private static let watchedEventTypes: [CGEventType] = [
-            .leftMouseDown, .rightMouseDown, .otherMouseDown,
-            .mouseMoved, .leftMouseDragged, .rightMouseDragged,
-            .keyDown, .flagsChanged, .scrollWheel,
-        ]
-
-        private func userIdleTime() -> TimeInterval {
-            Self.watchedEventTypes
-                .map { CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) }
-                .min() ?? 0
-        }
-
-        private func poll() {
-            let idle = userIdleTime()
-
-            switch state {
-            case .active:
-                if idle >= offTimeout {
-                    if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() { return }
-                    Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → OFF")
-                    showOverlays(alpha: 1.0, animated: true)
-                    state = .off
-                } else if idle >= dimTimeout {
-                    if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() { return }
-                    Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → DIM")
-                    showOverlays(alpha: Constants.dimAlpha, animated: true)
-                    state = .dimmed
-                }
-
-            case .dimmed:
-                if idle < 1.0 {
-                    Self.log.info("Activity → RESTORE")
-                    removeOverlays()
-                    state = .active
-                } else if idle >= offTimeout {
-                    if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() {
-                        Self.log.info("External assertion detected → RESTORE from dim")
-                        removeOverlays()
-                        state = .active
-                        return
-                    }
-                    Self.log.info("→ OFF")
-                    showOverlays(alpha: 1.0, animated: true)
-                    state = .off
-                }
-
-            case .off:
-                if idle < 1.0 {
-                    Self.log.info("Activity → RESTORE")
-                    removeOverlays()
-                    state = .active
-                }
-
-            case .idle:
-                break
-            }
-        }
+        override func keyDown(with _: NSEvent) {}
+        override func keyUp(with _: NSEvent) {}
+        override func flagsChanged(with _: NSEvent) {}
     }
 
 #endif

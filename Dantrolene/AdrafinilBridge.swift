@@ -38,6 +38,9 @@ import os
             static let renewalInterval: TimeInterval = 10 * 60
             static let renewalTolerance: TimeInterval = 60
             static let holdTTL: TimeInterval = 30 * 60
+            /// Per-process deadline for the synchronous release path (willSleep / willTerminate),
+            /// so a wedged CLI can't stall the main thread. The daemon-side `holdTTL` is the backstop.
+            static let synchronousReleaseTimeout: TimeInterval = 2
             /// Where the Adrafinil installer symlinks its CLI (`AdrafinilConstants.cliInstallPath`
             /// and its no-admin fallback). Checked before $PATH because GUI apps inherit a minimal
             /// PATH that omits /usr/local/bin.
@@ -142,8 +145,19 @@ import os
             for key in outstandingKeys {
                 let process = Self.makeProcess(at: cliPath, arguments: releaseArguments(key: key))
                 process.standardError = FileHandle.nullDevice
-                try? process.run()
-                process.waitUntilExit()
+                let done = DispatchSemaphore(value: 0)
+                process.terminationHandler = { _ in done.signal() }
+                do {
+                    try process.run()
+                } catch {
+                    continue
+                }
+                // Bounded wait: this runs on the willSleep / willTerminate path, so a wedged CLI
+                // must not stall the main thread (beachball on quit / lid-close). Terminate on
+                // timeout and move on — the daemon-side TTL reaps anything left registered.
+                if done.wait(timeout: .now() + Constants.synchronousReleaseTimeout) == .timedOut {
+                    process.terminate()
+                }
             }
             outstandingKeys.removeAll()
         }

@@ -2,44 +2,30 @@
 
     import CoreGraphics
     import Foundation
-    import IOKit.pwr_mgt
     import os
 
-    /// Simulates the normal display sleep sequence (dim → off → restore on activity)
-    /// while an IOPMAssertion prevents actual system display sleep.
-    ///
-    /// Uses `DisplayServices.framework` for display brightness,
-    /// `KeyboardBrightnessClient` for keyboard backlight, and
-    /// `CGEventSourceSecondsSinceLastEventType` for idle detection.
-    final class DisplaySleepSimulator {
-        private enum State {
-            case idle
-            case active
-            case dimmed
-            case off
-        }
-
-        private var state: State = .idle
-
+    /// Direct-distribution effects for `DisplaySleepStateMachine`: lowers the real display backlight
+    /// (`DisplayServices.framework`) and keyboard backlight (`KeyboardBrightnessClient`), restoring
+    /// the captured values on wake. Idle timing and the state machine live in
+    /// `DisplaySleepStateMachine`; this type only knows how to darken and restore hardware.
+    final class BrightnessEffects: DisplaySleepEffects {
         private nonisolated static let log = Logger(
-            subsystem: "glass.kagerou.dantrolene", category: "DisplaySleepSimulator",
+            subsystem: "glass.kagerou.dantrolene", category: "BrightnessEffects",
         )
 
-        // MARK: - Display Info
+        // MARK: - Display / keyboard records
 
         private struct Display {
             let id: UInt32
             var savedBrightness: Float
         }
 
-        // MARK: - Keyboard Info
-
         private struct Keyboard {
             let id: UInt64
             var savedBrightness: Float
         }
 
-        // MARK: - Display Framework Function Pointers
+        // MARK: - Display framework function pointers
 
         private typealias DSGetBrightness = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
         private typealias DSSetBrightness = @convention(c) (UInt32, Float) -> Int32
@@ -47,15 +33,13 @@
         private typealias CGGetOnline = @convention(c) (
             UInt32, UnsafeMutablePointer<UInt32>?, UnsafeMutablePointer<UInt32>?,
         ) -> Int32
-        private typealias IdleTimeFn = @convention(c) (Int32, UInt32) -> CFTimeInterval
 
         private var _getBrightness: DSGetBrightness?
         private var _setBrightness: DSSetBrightness?
         private var _canChange: DSCanChange?
         private var _getOnline: CGGetOnline?
-        private var _getIdleTime: IdleTimeFn?
 
-        // MARK: - Keyboard Framework Function Pointers
+        // MARK: - Keyboard framework function pointers
 
         private typealias KBGetBrFn = @convention(c) (AnyObject, Selector, UInt64) -> Float
         private typealias KBSetBrFn = @convention(c) (AnyObject, Selector, Float, UInt64) -> Void
@@ -69,89 +53,120 @@
 
         private var displays: [Display] = []
         private var keyboards: [Keyboard] = []
-        private var pollTask: Task<Void, Never>?
-        private var dimTimeout: TimeInterval = 570
-        private var offTimeout: TimeInterval = 600
+
+        /// Displays a restore couldn't reach because they were asleep/inactive (e.g. a clamshelled
+        /// built-in panel). Retried on later ticks once usable again, so brightness is never left
+        /// stuck at 0 — the root of the brightness-corruption cluster.
+        private var pendingRestore: Set<UInt32> = []
 
         private static let dimBrightness: Float = 0.03
 
-        /// Instant the simulator started or the display(s) last woke. After a wake the
-        /// panel brightness ramps for a few seconds; reads taken mid-ramp report transient
-        /// low values. Idle time (`CGEventSourceSecondsSinceLastEventType`) is *not* reset
-        /// by wake, so the first post-wake poll can otherwise fire a dim/off transition and
-        /// capture a ramp value into `savedBrightness` — corrupting the value later restored.
+        /// Instant the effects started or a display last woke. After a wake the panel brightness
+        /// ramps for a few seconds; reads taken mid-ramp report transient low values. Idle time is
+        /// not reset by a wake, so the first post-wake poll could otherwise capture a ramp value
+        /// into `savedBrightness` and corrupt what is later restored.
         private var lastWakeInstant = ContinuousClock.now
         private var displaysWereAsleep = false
         private static let wakeSettleInterval: Duration = .seconds(5)
-
-        // MARK: - Init
 
         init() {
             loadFrameworks()
         }
 
-        // MARK: - Public
+        // MARK: - DisplaySleepEffects
 
-        func start(mode: DisplaySleepMode) {
-            guard state == .idle else { return }
+        func begin() -> Bool {
             guard _getBrightness != nil, _setBrightness != nil else {
                 Self.log.error("DisplayServices not available")
-                return
+                return false
             }
-
-            applyMode(mode)
             refreshDisplays()
             setupKeyboardBacklight()
+            pendingRestore.removeAll()
             lastWakeInstant = .now
             displaysWereAsleep = false
-            state = .active
-            startPolling()
-
-            Self.log.notice(
-                "Started (dim at \(self.dimTimeout, format: .fixed(precision: 0))s, off at \(self.offTimeout, format: .fixed(precision: 0))s, \(self.displays.count) display(s), \(self.keyboards.count) keyboard(s))",
-            )
+            Self.log.notice("Ready (\(self.displays.count) display(s), \(self.keyboards.count) keyboard(s))")
+            return true
         }
 
-        func stop() {
-            guard state != .idle else { return }
-            pollTask?.cancel()
-            pollTask = nil
+        func tick(shouldBeAwake: Bool) -> Bool {
+            // Detect a display wake (asleep → awake) and re-arm the settle window so we never
+            // sample or apply brightness during the post-wake ramp, even for wakes that don't
+            // restart the machine (e.g. external display sleep/wake, opening a clamshell).
+            let asleepNow = displays.contains { CGDisplayIsAsleep($0.id) != 0 }
+            if displaysWereAsleep, !asleepNow {
+                lastWakeInstant = .now
+            }
+            displaysWereAsleep = asleepNow
 
-            if state == .dimmed || state == .off {
-                restoreAllBrightness()
-                restoreKeyboardBrightness()
+            if shouldBeAwake {
+                retryPendingRestores()
             }
 
-            state = .idle
-            Self.log.notice("Stopped")
+            return !(asleepNow || withinWakeSettle)
         }
 
-        func updateTimeout(_ mode: DisplaySleepMode) {
-            guard state != .idle else { return }
-            applyMode(mode)
-            Self.log.info(
-                "Updated timeouts (dim at \(self.dimTimeout, format: .fixed(precision: 0))s, off at \(self.offTimeout, format: .fixed(precision: 0))s)",
-            )
+        func captureBaseline() {
+            resaveBrightness()
         }
 
-        // MARK: - Timeout Configuration
+        func applyDim() {
+            setAllDisplayBrightness(Self.dimBrightness)
+            setKeyboardBrightness(0)
+        }
 
-        private func applyMode(_ mode: DisplaySleepMode) {
-            switch mode {
-            case .matchSystem:
-                guard let minutes = DisplayPowerInfo.systemDisplaySleepMinutes() else { return }
-                setTimeouts(totalSeconds: TimeInterval(minutes * 60))
-            case let .custom(minutes):
-                setTimeouts(totalSeconds: TimeInterval(minutes * 60))
+        func applyOff() {
+            setAllDisplayBrightness(0)
+            setKeyboardBrightness(0)
+        }
+
+        func restore() {
+            restoreAllBrightness()
+            restoreKeyboardBrightness()
+        }
+
+        func end() {
+            pendingRestore.removeAll()
+        }
+
+        func displayTopologyChanged() {
+            guard let getOnline = _getOnline, let getBr = _getBrightness else { return }
+
+            var count: UInt32 = 0
+            _ = getOnline(0, nil, &count)
+            var ids = [UInt32](repeating: 0, count: Int(count))
+            if count > 0 { _ = getOnline(count, &ids, &count) }
+            let liveIDs = Set(ids.prefix(Int(count)))
+
+            // Drop displays that went away (and any pending restore for them).
+            displays.removeAll { !liveIDs.contains($0.id) }
+            pendingRestore.formIntersection(liveIDs)
+
+            // Capture a baseline for genuinely new displays only — never resave existing ones,
+            // which could be mid-dim/off and would poison their saved value.
+            let known = Set(displays.map(\.id))
+            for id in liveIDs where !known.contains(id) {
+                if let canChange = _canChange, canChange(id) == 0 { continue }
+                var brightness: Float = 0
+                guard getBr(id, &brightness) == 0 else { continue }
+                displays.append(Display(id: id, savedBrightness: brightness))
             }
+            Self.log.info("Display topology changed → \(self.displays.count) display(s)")
         }
 
-        private func setTimeouts(totalSeconds: TimeInterval) {
-            offTimeout = totalSeconds
-            dimTimeout = max(totalSeconds - 30, totalSeconds * 0.75)
+        // MARK: - Display power state
+
+        /// A display that is asleep (system/display sleep or a clamshell-disabled built-in panel)
+        /// reports unreliable brightness and must never be read from or written to.
+        private func displayUsable(_ id: UInt32) -> Bool {
+            CGDisplayIsAsleep(id) == 0 && CGDisplayIsActive(id) != 0
         }
 
-        // MARK: - Framework Loading
+        private var withinWakeSettle: Bool {
+            ContinuousClock.now - lastWakeInstant < Self.wakeSettleInterval
+        }
+
+        // MARK: - Framework loading
 
         private func loadFrameworks() {
             guard
@@ -185,27 +200,9 @@
             if let sym = dlsym(cg, "CGGetOnlineDisplayList") {
                 _getOnline = unsafeBitCast(sym, to: CGGetOnline.self)
             }
-            if let sym = dlsym(cg, "CGEventSourceSecondsSinceLastEventType") {
-                _getIdleTime = unsafeBitCast(sym, to: IdleTimeFn.self)
-            }
         }
 
-        // MARK: - Display Power State
-
-        /// Whether a display is awake and drawable. A display that is asleep (system sleep,
-        /// display sleep, or a clamshell-disabled built-in panel) reports unreliable
-        /// brightness and must never be read from or written to.
-        private func displayUsable(_ id: UInt32) -> Bool {
-            CGDisplayIsAsleep(id) == 0 && CGDisplayIsActive(id) != 0
-        }
-
-        /// True while still inside the post-wake brightness ramp, during which reads are
-        /// transient and captures would corrupt `savedBrightness`.
-        private var withinWakeSettle: Bool {
-            ContinuousClock.now - lastWakeInstant < Self.wakeSettleInterval
-        }
-
-        // MARK: - Display Management
+        // MARK: - Display management
 
         private func refreshDisplays() {
             guard let getOnline = _getOnline, let getBr = _getBrightness else { return }
@@ -233,10 +230,17 @@
         private func resaveBrightness() {
             guard let getBr = _getBrightness else { return }
             displays = displays.map { d in
-                guard displayUsable(d.id) else { return d }
-                var brightness: Float = 0
-                guard getBr(d.id, &brightness) == 0 else { return d }
-                return Display(id: d.id, savedBrightness: brightness)
+                // Never overwrite a saved value while a restore is still pending for this display —
+                // its current reading is our dim/off value, not the user's.
+                guard displayUsable(d.id), !pendingRestore.contains(d.id) else { return d }
+                var current: Float = 0
+                guard getBr(d.id, &current) == 0 else { return d }
+                // A reading at/below the dim floor when a higher value was saved is almost
+                // certainly ours mid-transition, not the user's — don't adopt it.
+                if current <= Self.dimBrightness, d.savedBrightness > Self.dimBrightness {
+                    return d
+                }
+                return Display(id: d.id, savedBrightness: current)
             }
             resaveKeyboardBrightness()
         }
@@ -250,12 +254,31 @@
 
         private func restoreAllBrightness() {
             guard let setBr = _setBrightness else { return }
-            for d in displays where displayUsable(d.id) {
-                _ = setBr(d.id, d.savedBrightness)
+            for d in displays {
+                if displayUsable(d.id) {
+                    _ = setBr(d.id, d.savedBrightness)
+                    pendingRestore.remove(d.id)
+                } else {
+                    // Can't write to a sleeping/clamshelled panel now — retry once it wakes,
+                    // otherwise it stays stuck at our dim/off value.
+                    pendingRestore.insert(d.id)
+                }
             }
         }
 
-        // MARK: - Keyboard Backlight
+        /// Retries restores that were deferred because a display was asleep, once it is usable and
+        /// past the wake-settle window. Called from the active state only, so a display that woke
+        /// while the machine intends darkness isn't forced bright.
+        private func retryPendingRestores() {
+            guard !pendingRestore.isEmpty, !withinWakeSettle, let setBr = _setBrightness else { return }
+            for d in displays where pendingRestore.contains(d.id) && displayUsable(d.id) {
+                _ = setBr(d.id, d.savedBrightness)
+                pendingRestore.remove(d.id)
+                Self.log.info("Deferred restore completed for display \(d.id)")
+            }
+        }
+
+        // MARK: - Keyboard backlight
 
         private func setupKeyboardBacklight() {
             guard let kbcClass = NSClassFromString("KeyboardBrightnessClient") as? NSObject.Type else {
@@ -320,88 +343,6 @@
             let sel = Selector(("setBrightness:forKeyboard:"))
             for kb in keyboards {
                 setBr(client, sel, kb.savedBrightness, kb.id)
-            }
-        }
-
-        // MARK: - Polling
-
-        private func startPolling() {
-            pollTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    guard let self else { return }
-                    poll()
-                    try? await Task.sleep(for: .milliseconds(500), tolerance: .milliseconds(200))
-                }
-            }
-        }
-
-        private func userIdleTime() -> TimeInterval {
-            guard let fn = _getIdleTime else { return 0 }
-            return fn(1, 0xFFFF_FFFF)
-        }
-
-        private func restoreAndActivate() {
-            restoreAllBrightness()
-            restoreKeyboardBrightness()
-            state = .active
-        }
-
-        private func poll() {
-            // Detect a display wake (asleep → awake) and re-arm the settle window so we
-            // never sample or apply brightness during the post-wake ramp, even for wakes
-            // that don't restart the simulator (e.g. external display sleep/wake).
-            let asleepNow = displays.contains { CGDisplayIsAsleep($0.id) != 0 }
-            if displaysWereAsleep, !asleepNow {
-                lastWakeInstant = .now
-            }
-            displaysWereAsleep = asleepNow
-
-            let idle = userIdleTime()
-
-            switch state {
-            case .active:
-                // Never capture brightness while a display is asleep or still ramping after
-                // a wake — the reads are transient and would poison savedBrightness.
-                if asleepNow || withinWakeSettle { break }
-                if idle >= offTimeout {
-                    if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() { return }
-                    Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → OFF")
-                    resaveBrightness()
-                    setAllDisplayBrightness(0)
-                    setKeyboardBrightness(0)
-                    state = .off
-                } else if idle >= dimTimeout {
-                    if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() { return }
-                    Self.log.info("Idle \(idle, format: .fixed(precision: 0))s → DIM")
-                    resaveBrightness()
-                    setAllDisplayBrightness(Self.dimBrightness)
-                    setKeyboardBrightness(0)
-                    state = .dimmed
-                }
-
-            case .dimmed:
-                if idle < 1.0 {
-                    Self.log.info("Activity → RESTORE")
-                    restoreAndActivate()
-                } else if idle >= offTimeout {
-                    if DisplayPowerInfo.otherProcessHoldsDisplayAssertion() {
-                        Self.log.info("External assertion detected → RESTORE from dim")
-                        restoreAndActivate()
-                        return
-                    }
-                    Self.log.info("→ OFF")
-                    setAllDisplayBrightness(0)
-                    state = .off
-                }
-
-            case .off:
-                if idle < 1.0 {
-                    Self.log.info("Activity → RESTORE")
-                    restoreAndActivate()
-                }
-
-            case .idle:
-                break
             }
         }
     }
