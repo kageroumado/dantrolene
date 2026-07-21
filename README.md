@@ -12,7 +12,7 @@
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS Tahoe](https://img.shields.io/badge/macOS-Tahoe_26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
 
-<a href="https://apps.apple.com/us/app/dantrolene-no-lock-at-home/id6790834557?mt=12"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-mac-app-store/black/en-us" alt="Download on the Mac App Store" height="48"></a>
+<a href="https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-mac-app-store/black/en-us" alt="Download on the Mac App Store" height="48"></a>
 
 <table>
   <tr>
@@ -61,7 +61,7 @@ Dantrolene ships in two editions with the same version number; the Settings page
 | Lid-close sleep blocking via Adrafinil | Yes | No (sandboxing prevents talking to the Adrafinil daemon) |
 | Sandboxed | No | Yes |
 
-The GitHub edition is the full-featured one; the [App Store edition](https://apps.apple.com/us/app/dantrolene-no-lock-at-home/id6790834557?mt=12) ($2.99) is the convenient way to get the core WiFi-based lock prevention with store installs and updates — and it's the tip jar: buying it pays for the time that keeps the free edition alive. ♡
+The GitHub edition is the full-featured one; the [App Store edition](https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8) ($2.99) is the convenient way to get the core WiFi-based lock prevention with store installs and updates — and it's the tip jar: buying it pays for the time that keeps the free edition alive. ♡
 
 ## How it works
 
@@ -93,7 +93,7 @@ leaves your Mac.
 
 ## Download
 
-- **[Mac App Store](https://apps.apple.com/us/app/dantrolene-no-lock-at-home/id6790834557?mt=12)** — $2.99, sandboxed, updated through the store. The free build below is the same idea with more reach, so paying here is a choice, not a toll — it funds the work, and it's genuinely appreciated.
+- **[Mac App Store](https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8)** — $2.99, sandboxed, updated through the store. The free build below is the same idea with more reach, so paying here is a choice, not a toll — it funds the work, and it's genuinely appreciated.
 - **[GitHub Releases](https://github.com/kageroumado/dantrolene/releases/latest)** — free: a signed, notarized disk image of the full-featured edition. Open it, drag **Dantrolene** to Applications, and launch.
 
 ## Setup
