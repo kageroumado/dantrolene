@@ -95,6 +95,7 @@ leaves your Mac.
 
 - **[Mac App Store](https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8)** — $2.99, sandboxed, updated through the store. The free build below is the same idea with more reach, so paying here is a choice, not a toll — it funds the work, and it's genuinely appreciated.
 - **[GitHub Releases](https://github.com/kageroumado/dantrolene/releases/latest)** — free: a signed, notarized disk image of the full-featured edition. Open it, drag **Dantrolene** to Applications, and launch.
+- **Homebrew** — `brew install --cask kageroumado/tap/dantrolene` — the same free DMG, via [my tap](https://github.com/kageroumado/homebrew-tap). The fully qualified name auto-trusts the cask under Homebrew 6's tap-trust system.
 
 ## Setup
 
