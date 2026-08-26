@@ -183,6 +183,7 @@ struct MenuBarPopoverView: View {
             options: DantroleneManager.Mode.allCases.map { ($0, $0.rawValue) },
             selection: $manager.mode,
             height: 32,
+            onTint: Theme.onActive,
         )
     }
 
@@ -289,6 +290,7 @@ struct MenuBarPopoverView: View {
                 selection: displaySleepTagBinding,
                 height: 26,
                 font: .caption,
+                onTint: Theme.onActive,
             )
         }
     }
@@ -389,29 +391,5 @@ struct MenuBarPopoverView: View {
     private func utilityIcon(_ name: String) -> some View {
         Image(systemName: name)
             .frame(width: 16, height: 16)
-    }
-}
-
-// MARK: - Footer chip
-
-/// A caption-sized glass pill that doubles as navigation into its page.
-private struct FooterChip: View {
-    let text: String
-    let systemImage: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label {
-                Text(text)
-                    .lineLimit(1)
-            } icon: {
-                Image(systemName: systemImage)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.glass)
-        .controlSize(.small)
     }
 }
