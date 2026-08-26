@@ -1,3 +1,4 @@
+import Propofol
 import SwiftUI
 
 /// The window-style popover attached to the menu-bar status item.
@@ -111,12 +112,7 @@ struct MenuBarPopoverView: View {
     }
 
     private var header: some View {
-        HStack(spacing: Theme.Space.sm) {
-            Text("Dantrolene")
-                .font(.heroTitle)
-            Spacer()
-            AttributionLink()
-        }
+        PopoverHeader("Dantrolene")
     }
 
     // MARK: Hero
@@ -417,27 +413,5 @@ private struct FooterChip: View {
         }
         .buttonStyle(.glass)
         .controlSize(.small)
-    }
-}
-
-// MARK: - Attribution
-
-private struct AttributionLink: View {
-    @State private var hovering = false
-
-    var body: some View {
-        Link(destination: URL(string: "https://github.com/kageroumado")!) {
-            HStack(spacing: 2) {
-                Text("made by kageroumado")
-                    .underline(hovering)
-                Image(systemName: "arrow.up.right")
-                    .font(.caption2)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
     }
 }

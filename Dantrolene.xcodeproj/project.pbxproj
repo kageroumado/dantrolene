@@ -60,6 +60,9 @@
 				AA97E53E2F44B720002B96F4 /* Dantrolene */,
 			);
 			name = Dantrolene;
+			packageProductDependencies = (
+				7B0000000000000000000002 /* Propofol */,
+			);
 			productName = Dantrolene;
 			productReference = 0B5F63F62F4805FA00682874 /* Dantrolene.app */;
 			productType = "com.apple.product-type.application";
@@ -88,6 +91,9 @@
 			);
 			mainGroup = AA97E5332F44B720002B96F4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7B0000000000000000000001 /* XCLocalSwiftPackageReference "propofol" */,
+			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = AA97E5352F44B720002B96F4 /* Products */;
 			projectDirPath = "";
@@ -462,6 +468,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		7B0000000000000000000001 /* XCLocalSwiftPackageReference "propofol" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../propofol;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7B0000000000000000000002 /* Propofol */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7B0000000000000000000001 /* XCLocalSwiftPackageReference "propofol" */;
+			productName = Propofol;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA97E5342F44B720002B96F4 /* Project object */;
 }

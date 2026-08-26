@@ -1,3 +1,4 @@
+import Propofol
 import SwiftUI
 
 /// Layout constants at file scope — static stored properties aren't allowed in generic types.
