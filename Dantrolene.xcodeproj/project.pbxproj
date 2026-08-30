@@ -92,7 +92,7 @@
 			mainGroup = AA97E5332F44B720002B96F4;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				7B0000000000000000000001 /* XCLocalSwiftPackageReference "propofol" */,
+				7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = AA97E5352F44B720002B96F4 /* Products */;
@@ -469,17 +469,21 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		7B0000000000000000000001 /* XCLocalSwiftPackageReference "propofol" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../propofol;
+/* Begin XCRemoteSwiftPackageReference section */
+		7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kageroumado/propofol.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.0;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		7B0000000000000000000002 /* Propofol */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7B0000000000000000000001 /* XCLocalSwiftPackageReference "propofol" */;
+			package = 7B0000000000000000000001 /* XCRemoteSwiftPackageReference "propofol" */;
 			productName = Propofol;
 		};
 /* End XCSwiftPackageProductDependency section */
