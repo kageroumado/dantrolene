@@ -188,7 +188,7 @@ struct MorphingMark: View {
     }
 }
 
-private struct MorphingMarkShape: Shape {
+nonisolated private struct MorphingMarkShape: Shape {
     var progress: CGFloat
 
     var animatableData: CGFloat {
