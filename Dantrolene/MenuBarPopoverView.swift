@@ -26,7 +26,9 @@ struct MenuBarPopoverView: View {
     @State private var pushing = true
 
     var body: some View {
-        GlassEffectContainer(spacing: Theme.Space.md) {
+        // Zero blend distance: the footer's controls sit closer together than any nonzero
+        // spacing would allow before their glass starts pooling into one shape.
+        GlassEffectContainer(spacing: 0) {
             ZStack(alignment: .top) {
                 switch page {
                 case .main:
@@ -44,7 +46,7 @@ struct MenuBarPopoverView: View {
                     #endif
                 }
             }
-            .padding(Theme.Space.lg)
+            .popoverContainer()
         }
         .frame(width: Theme.popoverWidth)
         .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: page)
@@ -343,26 +345,16 @@ struct MenuBarPopoverView: View {
         HStack(spacing: Theme.Space.sm) {
             metaChips
             Spacer(minLength: 0)
-            HStack(spacing: Theme.Space.sm) {
-                Button {
-                    push(.settings)
-                } label: {
-                    utilityIcon("gearshape")
-                }
-                .help("Settings")
-                .accessibilityLabel("Settings")
-
-                Button {
-                    NSApplication.shared.terminate(nil)
-                } label: {
-                    utilityIcon("xmark")
-                }
-                .keyboardShortcut("q")
-                .help("Quit Dantrolene")
-                .accessibilityLabel("Quit Dantrolene")
+            FooterIconButton("Settings", systemImage: "gearshape") {
+                push(.settings)
             }
-            .buttonStyle(.glass)
-            .controlSize(.large)
+            .help("Settings")
+
+            FooterIconButton("Quit Dantrolene", systemImage: "xmark") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q")
+            .help("Quit Dantrolene")
         }
     }
 
@@ -384,12 +376,5 @@ struct MenuBarPopoverView: View {
                 }
             #endif
         }
-    }
-
-    /// A glyph for the bottom-bar utility buttons, pinned to a fixed square so both `.glass`
-    /// capsules come out the same size regardless of glyph proportions.
-    private func utilityIcon(_ name: String) -> some View {
-        Image(systemName: name)
-            .frame(width: 16, height: 16)
     }
 }

@@ -1,47 +1,50 @@
 #if DEBUG
 
     import AppKit
+    import Propofol
     import SwiftUI
 
     /// A chrome-less stage for capturing clean popover screenshots.
     ///
     /// The real MenuBarExtra popover is useless for marketing captures: its vibrancy material
-    /// samples whatever happens to be behind the window (muddy grays), the system window has
-    /// its own corner treatment that captures poorly, and the window object lingers off-screen
-    /// after dismissal — `screencapture -l` happily grabs stale content.
+    /// samples whatever happens to be behind the window (muddy grays), and the window object
+    /// lingers off-screen after dismissal — `screencapture -l` happily grabs stale content.
     ///
-    /// This window shows the same `MenuBarPopoverView`, bound to the same live manager (so it
-    /// is fully interactive — click Use Current, flip toggles), on an opaque window background
-    /// with proper rounded alpha corners and no shadow. Capture it with the system screenshot
-    /// picker (⇧⌘4, space, click) or `screencapture -l <window id>`.
+    /// The stage shows the same `MenuBarPopoverView`, bound to the same live manager (so it is
+    /// fully interactive), in Propofol's `PopoverStageWindow` — one window forced light, one
+    /// forced dark. Capture with `screencapture -l <window id> -o out.png`.
     ///
     /// Present by launching with `-DANTROLENE_GALLERY 1`; pair with `DANTROLENE_FAKE_SSID` in
-    /// the environment (see `WiFiMonitor`) to stage home/away states on any machine.
+    /// the environment (see `WiFiMonitor`) to stage home/away states on any machine. Tinted
+    /// glass takes its color only in the key window, so launch once per shot with
+    /// `-DANTROLENE_GALLERY_KEY light` or `dark` and capture that window.
     @MainActor
     enum ScreenshotGallery {
-        private static var window: NSWindow?
+        private static var windows: [NSWindow] = []
 
         static func present(manager: DantroleneManager) {
-            if let window {
-                window.makeKeyAndOrderFront(nil)
+            guard windows.isEmpty else {
+                windows.forEach { $0.makeKeyAndOrderFront(nil) }
                 NSApp.activate(ignoringOtherApps: true)
                 return
             }
 
-            let hosting = NSHostingController(rootView: StageView(manager: manager))
-            let stage = KeyableBorderlessWindow(contentViewController: hosting)
-            stage.styleMask = [.borderless]
-            stage.title = "Dantrolene — Screenshot Stage"
-            stage.isOpaque = false
-            stage.backgroundColor = .clear
-            stage.hasShadow = false
-            stage.isMovableByWindowBackground = true
-            stage.isReleasedWhenClosed = false
-            stage.level = .floating
-            stage.center()
-            window = stage
-            stage.makeKeyAndOrderFront(nil)
+            let light = PopoverStageWindow(title: "Dantrolene — Stage (Light)") {
+                MenuBarPopoverView(manager: manager)
+            }
+            let dark = PopoverStageWindow(title: "Dantrolene — Stage (Dark)", dark: true) {
+                MenuBarPopoverView(manager: manager)
+            }
+            light.center()
+            let origin = light.frame.origin
+            light.setFrameOrigin(NSPoint(x: origin.x - light.frame.width * 0.7, y: origin.y))
+            dark.setFrameOrigin(NSPoint(x: origin.x + dark.frame.width * 0.7, y: origin.y))
+
+            windows = [light, dark]
+            windows.forEach { $0.orderFront(nil) }
             presentSymbolLab()
+            let darkIsKey = UserDefaults.standard.string(forKey: "DANTROLENE_GALLERY_KEY") == "dark"
+            (darkIsKey ? dark : light).makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
 
@@ -145,31 +148,6 @@
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    /// Borderless windows refuse key status by default, which would make the stage's
-    /// controls (Use Current, the toggles) unclickable.
-    private final class KeyableBorderlessWindow: NSWindow {
-        override var canBecomeKey: Bool {
-            true
-        }
-    }
-
-    private struct StageView: View {
-        @Bindable var manager: DantroleneManager
-
-        private static let cornerRadius: CGFloat = 13
-
-        var body: some View {
-            MenuBarPopoverView(manager: manager)
-                .background(Color(nsColor: .windowBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-                }
-                .padding(1)
         }
     }
 

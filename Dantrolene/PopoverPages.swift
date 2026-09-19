@@ -354,13 +354,7 @@ struct NavHeader: View {
 
     var body: some View {
         HStack(spacing: Theme.Space.sm + 2) {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.footnote.weight(.semibold))
-                    .frame(width: 12, height: 12)
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel("Back")
+            FooterIconButton("Back", systemImage: "chevron.left", action: onBack)
 
             Text(title)
                 .font(.heroTitle)

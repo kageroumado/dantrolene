@@ -6,6 +6,10 @@
 	objectVersion = 90;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0BEF1B2930453EDC00159F98 /* Propofol in Frameworks */ = {isa = PBXBuildFile; productRef = 7B0000000000000000000002 /* Propofol */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		0B5F63F62F4805FA00682874 /* Dantrolene.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dantrolene.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -22,6 +26,7 @@
 		AA97E5392F44B720002B96F4 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				0BEF1B2930453EDC00159F98 /* Propofol in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -475,7 +480,7 @@
 			repositoryURL = "https://github.com/kageroumado/propofol.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.1.0;
+				minimumVersion = 0.2.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

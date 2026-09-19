@@ -297,6 +297,13 @@ import os
         }
 
         private static func locateCLI() -> String? {
+            #if DEBUG
+                // Screenshot staging: a CLI that accepts every hold, so the Adrafinil-installed
+                // states render on a Mac without Adrafinil (paired with ScreenshotGallery).
+                if ProcessInfo.processInfo.environment["DANTROLENE_FAKE_ADRAFINIL"] != nil {
+                    return "/usr/bin/true"
+                }
+            #endif
             var candidates = Constants.installPaths
             if let path = ProcessInfo.processInfo.environment["PATH"] {
                 candidates += path.split(separator: ":").map { "\($0)/adrafinil" }

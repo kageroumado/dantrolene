@@ -178,6 +178,13 @@ final class DantroleneManager {
         }
 
         self.blockLidCloseSleep = UserDefaults.standard.bool(forKey: Keys.blockLidCloseSleep)
+        #if DEBUG
+            // Screenshot staging: a staged Adrafinil (see `AdrafinilBridge`) comes with the lid
+            // hold on. Assigned in init, so it is never persisted.
+            if ProcessInfo.processInfo.environment["DANTROLENE_FAKE_ADRAFINIL"] != nil {
+                self.blockLidCloseSleep = true
+            }
+        #endif
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
 
         lockPreventer.onStateChanged = { [weak self] isActive in
