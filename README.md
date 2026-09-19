@@ -10,7 +10,7 @@
 
 [![kagerou.glass](https://img.shields.io/badge/kagerou.glass-858CFC?style=for-the-badge&logo=safari&logoColor=white)](https://kagerou.glass/dantrolene/)
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
-[![macOS Tahoe](https://img.shields.io/badge/macOS-Tahoe_26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
+[![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
 
 <a href="https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-mac-app-store/black/en-us" alt="Download on the Mac App Store" height="48"></a>
 
@@ -87,7 +87,7 @@ leaves your Mac.
 
 ## Requirements
 
-- **macOS Tahoe 26+**
+- **macOS 26+**
 - **Location Services permission** (required by macOS to read the WiFi SSID)
 - **Xcode 26+** to build, with Swift 6 strict concurrency enabled
 
