@@ -12,6 +12,8 @@
 [![@kageroumado](https://img.shields.io/badge/@kageroumado-76e6e0?style=for-the-badge&logo=x&logoColor=0d0a10)](https://x.com/kageroumado)
 [![macOS 26+](https://img.shields.io/badge/macOS-26%2B-0d0a10?style=for-the-badge&logo=apple&logoColor=white)](#requirements)
 
+<a href="https://kagerou.glass/get/dantrolene?from=readme"><img src=".github/download.svg" alt="Download Dantrolene for Mac" width="360" height="80"></a><br><sub>A signed, notarized disk image · free and open source (MIT)</sub>
+
 <a href="https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-mac-app-store/black/en-us" alt="Download on the Mac App Store" height="48"></a>
 
 <table>
@@ -94,7 +96,7 @@ leaves your Mac.
 ## Download
 
 - **[Mac App Store](https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8)** — $2.99, sandboxed, updated through the store. The free build below is the same idea with more reach, so paying here is a choice, not a toll — it funds the work, and it's genuinely appreciated.
-- **[GitHub Releases](https://github.com/kageroumado/dantrolene/releases/latest)** — free: a signed, notarized disk image of the full-featured edition. Open it, drag **Dantrolene** to Applications, and launch.
+- **[Download the DMG](https://kagerou.glass/get/dantrolene?from=readme)** — free: a signed, notarized disk image of the full-featured edition. Open it, drag **Dantrolene** to Applications, and launch.
 - **Homebrew** — `brew install --cask kageroumado/tap/dantrolene` — the same free DMG, via [my tap](https://github.com/kageroumado/homebrew-tap). The fully qualified name auto-trusts the cask under Homebrew 6's tap-trust system.
 
 ## Setup
