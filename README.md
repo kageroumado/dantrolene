@@ -2,8 +2,7 @@
 
 Dantrolene keeps your Mac unlocked on a chosen Wi-Fi network while still dimming the display after inactivity. Leaving that network restores normal locking. The GitHub edition controls the real backlight; the App Store edition uses black overlays.
 
-<a href="https://kagerou.glass/get/dantrolene?from=readme"><img src=".github/download.svg" alt="Download Dantrolene for Mac" width="360" height="80"></a>
-<a href="https://apps.apple.com/app/apple-store/id6790834557?pt=128650112&ct=GitHub&mt=8"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-mac-app-store/black/en-us" alt="Download on the Mac App Store" height="48"></a>
+<a href="https://kagerou.glass/dantrolene/"><img src=".github/download.svg" alt="Download Dantrolene for Mac" width="360" height="80"></a>
 
 ![Dantrolene](.github/dantrolene-home.png)
 
